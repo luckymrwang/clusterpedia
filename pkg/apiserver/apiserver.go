@@ -20,7 +20,6 @@ import (
 
 	internal "github.com/clusterpedia-io/api/clusterpedia"
 	"github.com/clusterpedia-io/api/clusterpedia/install"
-	"github.com/clusterpedia-io/clusterpedia/pkg/apiserver/registry/clusterpedia/collectionresources"
 	"github.com/clusterpedia-io/clusterpedia/pkg/apiserver/registry/clusterpedia/resources"
 	"github.com/clusterpedia-io/clusterpedia/pkg/generated/clientset/versioned"
 	informers "github.com/clusterpedia-io/clusterpedia/pkg/generated/informers/externalversions"
@@ -149,7 +148,6 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 
 	v1beta1storage := map[string]rest.Storage{}
 	v1beta1storage["resources"] = resources.NewREST(kubeResourceAPIServer.Handler)
-	v1beta1storage["collectionresources"] = collectionresources.NewREST(config.GenericConfig.Serializer, config.StorageFactory)
 
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(internal.GroupName, Scheme, ParameterCodec, Codecs)
 	apiGroupInfo.VersionedResourcesStorageMap["v1beta1"] = v1beta1storage
