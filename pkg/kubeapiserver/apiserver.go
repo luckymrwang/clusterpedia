@@ -134,7 +134,6 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/api/", resourceHandler)
 	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/apis/", resourceHandler)
 
-	_ = NewClusterResourceController(restManager, discoveryManager, c.ExtraConfig.InformerFactory.Cluster().V1alpha2().PediaClusters())
 	return genericserver, nil
 }
 
