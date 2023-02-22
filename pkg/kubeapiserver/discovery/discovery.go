@@ -2,14 +2,12 @@ package discovery
 
 import (
 	"net/http"
-	"reflect"
 	"sync"
 	"sync/atomic"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apiserver/pkg/endpoints/handlers/negotiation"
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 
@@ -161,111 +159,4 @@ func (m *DiscoveryManager) handleLegacyAPI(pathParts []string, w http.ResponseWr
 
 	// match /api/v1
 	m.versionHandler.ServeHTTP(w, req)
-}
-
-func (m *DiscoveryManager) SetClusterGroupResource(cluster string, apis map[schema.GroupResource]ResourceDiscoveryAPI) {
-	groups := sets.NewString()
-	apiversions := make(map[schema.GroupVersion][]metav1.APIResource)
-	for gr, api := range apis {
-		groups.Insert(gr.Group)
-		for version := range api.Versions {
-			apiversions[version] = append(apiversions[version], api.Resource)
-		}
-	}
-
-	currentversions := m.versionHandler.getClusterDiscoveryAPI(cluster)
-	if reflect.DeepEqual(currentversions, apiversions) {
-		return
-	}
-
-	m.discoveryLock.Lock()
-	defer m.discoveryLock.Unlock()
-
-	// set cluster's resource versions
-	m.versionHandler.setClusterDiscoveryAPI(cluster, apiversions)
-	m.versionHandler.rebuildGlobalDiscoveryAPI()
-
-	groupversions := make(map[schema.GroupVersion]struct{}, len(apiversions))
-	for gv := range apiversions {
-		groupversions[gv] = struct{}{}
-	}
-
-	allgroups := m.groupSource.GetAPIGroups()
-	apigroups := buildAPIGroups(groups, groupversions, allgroups)
-
-	currentgroups := m.groupHandler.getClusterDiscoveryAPI(cluster)
-	if reflect.DeepEqual(apigroups, currentgroups) {
-		return
-	}
-
-	m.groupHandler.setClusterDiscoveryAPI(cluster, apigroups)
-	m.groupHandler.rebuildGlobalDiscoveryAPI(allgroups)
-
-	m.rebuildClusterDiscoveryAPI(cluster)
-	m.rebuildGlobalDiscoveryAPI()
-}
-
-func (m *DiscoveryManager) rebuildClusterDiscoveryAPI(cluster string) {
-	clustergroups := make(map[string][]metav1.APIGroup)
-	for cluster, gs := range m.clusterAPIGroups.Load().(map[string][]metav1.APIGroup) {
-		clustergroups[cluster] = gs
-	}
-
-	currentgroups := m.groupHandler.getClusterDiscoveryAPI(cluster)
-	if currentgroups == nil {
-		delete(clustergroups, cluster)
-		m.clusterAPIGroups.Store(clustergroups)
-		return
-	}
-
-	apigroups := make([]metav1.APIGroup, 0, len(currentgroups))
-	for name, group := range currentgroups {
-		if name == "" {
-			continue
-		}
-
-		apigroups = append(apigroups, group)
-	}
-	sortAPIGroupByName(apigroups)
-
-	clustergroups[cluster] = apigroups
-	m.clusterAPIGroups.Store(clustergroups)
-}
-
-func (m *DiscoveryManager) rebuildGlobalDiscoveryAPI() {
-	currentgroups := m.groupHandler.getGlobalDiscoveryAPI()
-
-	apigroups := make([]metav1.APIGroup, 0, len(currentgroups))
-	for name, group := range currentgroups {
-		if name == "" {
-			continue
-		}
-		apigroups = append(apigroups, group)
-	}
-	sortAPIGroupByName(apigroups)
-
-	m.apigroups.Store(apigroups)
-}
-
-func (m *DiscoveryManager) RemoveCluster(cluster string) {
-	clustergroups := m.clusterAPIGroups.Load().(map[string][]metav1.APIGroup)
-	if _, ok := clustergroups[cluster]; !ok {
-		return
-	}
-
-	m.discoveryLock.Lock()
-	defer m.discoveryLock.Unlock()
-
-	if m.versionHandler.getClusterDiscoveryAPI(cluster) != nil {
-		m.versionHandler.removeClusterDiscoveryAPI(cluster)
-		m.versionHandler.rebuildGlobalDiscoveryAPI()
-	}
-
-	if m.groupHandler.getClusterDiscoveryAPI(cluster) != nil {
-		m.groupHandler.removeClusterDiscoveryAPI(cluster)
-		m.groupHandler.rebuildGlobalDiscoveryAPI(m.groupSource.GetAPIGroups())
-
-		m.rebuildClusterDiscoveryAPI(cluster)
-		m.rebuildGlobalDiscoveryAPI()
-	}
 }

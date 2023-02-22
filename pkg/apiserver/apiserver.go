@@ -124,7 +124,6 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 	resourceServerConfig.GenericConfig.ExternalAddress = config.GenericConfig.ExternalAddress
 	resourceServerConfig.GenericConfig.LoopbackClientConfig = config.GenericConfig.LoopbackClientConfig
 	resourceServerConfig.ExtraConfig = kubeapiserver.ExtraConfig{
-		InformerFactory:          clusterpediaInformerFactory,
 		StorageFactory:           config.StorageFactory,
 		InitialAPIGroupResources: initialAPIGroupResources,
 	}

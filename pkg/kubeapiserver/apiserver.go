@@ -16,7 +16,6 @@ import (
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/restmapper"
 
-	informers "github.com/clusterpedia-io/clusterpedia/pkg/generated/informers/externalversions"
 	"github.com/clusterpedia-io/clusterpedia/pkg/kubeapiserver/discovery"
 	"github.com/clusterpedia-io/clusterpedia/pkg/storage"
 	"github.com/clusterpedia-io/clusterpedia/pkg/utils/filters"
@@ -62,7 +61,6 @@ func NewDefaultConfig() *Config {
 
 type ExtraConfig struct {
 	StorageFactory           storage.StorageFactory
-	InformerFactory          informers.SharedInformerFactory
 	InitialAPIGroupResources []*restmapper.APIGroupResources
 }
 
@@ -102,9 +100,6 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 	if c.ExtraConfig.StorageFactory == nil {
 		return nil, errors.New("kubeapiserver.New() called with config.StorageFactory == nil")
 	}
-	if c.ExtraConfig.InformerFactory == nil {
-		return nil, errors.New("kubeapiserver.New() called with config.InformerFactory == nil")
-	}
 
 	genericserver, err := c.GenericConfig.New("clusterpedia-kube-apiserver", delegationTarget)
 	if err != nil {
@@ -126,10 +121,9 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 	resourceHandler := &ResourceHandler{
 		minRequestTimeout: time.Duration(c.GenericConfig.MinRequestTimeout) * time.Second,
 
-		delegate:      delegate,
-		rest:          restManager,
-		discovery:     discoveryManager,
-		clusterLister: c.ExtraConfig.InformerFactory.Cluster().V1alpha2().PediaClusters().Lister(),
+		delegate:  delegate,
+		rest:      restManager,
+		discovery: discoveryManager,
 	}
 	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/api/", resourceHandler)
 	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/apis/", resourceHandler)
