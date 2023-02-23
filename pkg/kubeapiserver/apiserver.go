@@ -1,10 +1,6 @@
 package kubeapiserver
 
 import (
-	"errors"
-	"net/http"
-	"time"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -15,11 +11,10 @@ import (
 	genericfilters "k8s.io/apiserver/pkg/server/filters"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/restmapper"
+	"net/http"
 
-	"github.com/clusterpedia-io/clusterpedia/pkg/kubeapiserver/discovery"
 	"github.com/clusterpedia-io/clusterpedia/pkg/storage"
 	"github.com/clusterpedia-io/clusterpedia/pkg/utils/filters"
-	"github.com/clusterpedia-io/clusterpedia/pkg/version"
 )
 
 var (
@@ -70,22 +65,6 @@ type Config struct {
 	ExtraConfig ExtraConfig
 }
 
-func (c *Config) Complete() CompletedConfig {
-	completed := &completedConfig{
-		GenericConfig: c.GenericConfig.Complete(),
-		ExtraConfig:   &c.ExtraConfig,
-	}
-
-	if c.GenericConfig.Version == nil {
-		version := version.GetKubeVersion()
-		c.GenericConfig.Version = &version
-	}
-	c.GenericConfig.RequestInfoResolver = wrapRequestInfoResolverForNamespace{
-		c.GenericConfig.RequestInfoResolver,
-	}
-	return CompletedConfig{completed}
-}
-
 type completedConfig struct {
 	GenericConfig genericapiserver.CompletedConfig
 
@@ -94,41 +73,6 @@ type completedConfig struct {
 
 type CompletedConfig struct {
 	*completedConfig
-}
-
-func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget) (*genericapiserver.GenericAPIServer, error) {
-	if c.ExtraConfig.StorageFactory == nil {
-		return nil, errors.New("kubeapiserver.New() called with config.StorageFactory == nil")
-	}
-
-	genericserver, err := c.GenericConfig.New("clusterpedia-kube-apiserver", delegationTarget)
-	if err != nil {
-		return nil, err
-	}
-
-	delegate := delegationTarget.UnprotectedHandler()
-	if delegate == nil {
-		delegate = http.NotFoundHandler()
-	}
-
-	restManager := NewRESTManager(c.GenericConfig.Serializer, runtime.ContentTypeJSON, c.ExtraConfig.StorageFactory, c.ExtraConfig.InitialAPIGroupResources)
-	discoveryManager := discovery.NewDiscoveryManager(c.GenericConfig.Serializer, restManager, delegate)
-
-	// handle root discovery request
-	genericserver.Handler.NonGoRestfulMux.Handle("/api", discoveryManager)
-	genericserver.Handler.NonGoRestfulMux.Handle("/apis", discoveryManager)
-
-	resourceHandler := &ResourceHandler{
-		minRequestTimeout: time.Duration(c.GenericConfig.MinRequestTimeout) * time.Second,
-
-		delegate:  delegate,
-		rest:      restManager,
-		discovery: discoveryManager,
-	}
-	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/api/", resourceHandler)
-	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/apis/", resourceHandler)
-
-	return genericserver, nil
 }
 
 func BuildHandlerChain(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {

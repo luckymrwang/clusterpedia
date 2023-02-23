@@ -12,7 +12,6 @@ import (
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/klog/v2"
 
-	"github.com/clusterpedia-io/clusterpedia/pkg/kubeapiserver/discovery"
 	"github.com/clusterpedia-io/clusterpedia/pkg/utils/request"
 )
 
@@ -20,8 +19,7 @@ type ResourceHandler struct {
 	minRequestTimeout time.Duration
 	delegate          http.Handler
 
-	rest      *RESTManager
-	discovery *discovery.DiscoveryManager
+	rest *RESTManager
 }
 
 func (r *ResourceHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -34,19 +32,9 @@ func (r *ResourceHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// handle discovery request
-	if !requestInfo.IsResourceRequest {
-		r.discovery.ServeHTTP(w, req)
-		return
-	}
-
 	gvr := schema.GroupVersionResource{Group: requestInfo.APIGroup, Version: requestInfo.APIVersion, Resource: requestInfo.Resource}
 	// When clusterName not empty, first check cluster whether exist
 	clusterName := request.ClusterNameValue(req.Context())
-	if !r.discovery.ResourceEnabled(clusterName, gvr) {
-		r.delegate.ServeHTTP(w, req)
-		return
-	}
 
 	info := r.rest.GetRESTResourceInfo(gvr)
 	if info.Empty() {

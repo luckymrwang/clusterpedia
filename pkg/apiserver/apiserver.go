@@ -101,9 +101,6 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 	if config.ClientConfig == nil {
 		return nil, fmt.Errorf("CompletedConfig.New() called with config.ClientConfig == nil")
 	}
-	if config.StorageFactory == nil {
-		return nil, fmt.Errorf("CompletedConfig.New() called with config.StorageFactory == nil")
-	}
 
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config.ClientConfig)
 	if err != nil {
@@ -127,10 +124,6 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 		StorageFactory:           config.StorageFactory,
 		InitialAPIGroupResources: initialAPIGroupResources,
 	}
-	kubeResourceAPIServer, err := resourceServerConfig.Complete().New(genericapiserver.NewEmptyDelegate())
-	if err != nil {
-		return nil, err
-	}
 
 	handlerChainFunc := config.GenericConfig.BuildHandlerChainFunc
 	config.GenericConfig.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
@@ -140,13 +133,13 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 		return handler
 	}
 
-	genericServer, err := config.GenericConfig.New("clusterpedia", hooksDelegate{kubeResourceAPIServer})
+	genericServer, err := config.GenericConfig.New("clusterpedia", genericapiserver.NewEmptyDelegate())
 	if err != nil {
 		return nil, err
 	}
 
 	v1beta1storage := map[string]rest.Storage{}
-	v1beta1storage["resources"] = resources.NewREST(kubeResourceAPIServer.Handler)
+	v1beta1storage["resources"] = resources.NewREST(genericServer.Handler)
 
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(internal.GroupName, Scheme, ParameterCodec, Codecs)
 	apiGroupInfo.VersionedResourcesStorageMap["v1beta1"] = v1beta1storage
