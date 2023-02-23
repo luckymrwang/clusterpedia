@@ -116,6 +116,10 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 	resourceServerConfig.ExtraConfig = kubeapiserver.ExtraConfig{
 		InitialAPIGroupResources: initialAPIGroupResources,
 	}
+	kubeResourceAPIServer, err := resourceServerConfig.Complete().New(genericapiserver.NewEmptyDelegate())
+	if err != nil {
+		return nil, err
+	}
 
 	handlerChainFunc := config.GenericConfig.BuildHandlerChainFunc
 	config.GenericConfig.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
@@ -125,13 +129,13 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 		return handler
 	}
 
-	genericServer, err := config.GenericConfig.New("clusterpedia", genericapiserver.NewEmptyDelegate())
+	genericServer, err := config.GenericConfig.New("clusterpedia", hooksDelegate{kubeResourceAPIServer})
 	if err != nil {
 		return nil, err
 	}
 
 	v1beta1storage := map[string]rest.Storage{}
-	v1beta1storage["resources"] = resources.NewREST(genericServer.Handler)
+	v1beta1storage["resources"] = resources.NewREST(kubeResourceAPIServer.Handler)
 
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(internal.GroupName, Scheme, ParameterCodec, Codecs)
 	apiGroupInfo.VersionedResourcesStorageMap["v1beta1"] = v1beta1storage

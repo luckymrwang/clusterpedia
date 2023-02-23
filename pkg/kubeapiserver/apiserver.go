@@ -1,18 +1,21 @@
 package kubeapiserver
 
 import (
+	"net/http"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
+	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericfilters "k8s.io/apiserver/pkg/server/filters"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/restmapper"
-	"net/http"
 
 	"github.com/clusterpedia-io/clusterpedia/pkg/utils/filters"
+	"github.com/clusterpedia-io/clusterpedia/pkg/version"
 )
 
 var (
@@ -72,6 +75,40 @@ type CompletedConfig struct {
 	*completedConfig
 }
 
+func (c *Config) Complete() CompletedConfig {
+	completed := &completedConfig{
+		GenericConfig: c.GenericConfig.Complete(),
+		ExtraConfig:   &c.ExtraConfig,
+	}
+
+	if c.GenericConfig.Version == nil {
+		version := version.GetKubeVersion()
+		c.GenericConfig.Version = &version
+	}
+	c.GenericConfig.RequestInfoResolver = wrapRequestInfoResolverForNamespace{
+		c.GenericConfig.RequestInfoResolver,
+	}
+	return CompletedConfig{completed}
+}
+
+func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget) (*genericapiserver.GenericAPIServer, error) {
+	genericserver, err := c.GenericConfig.New("kube-aggregation-apiserver", delegationTarget)
+	if err != nil {
+		return nil, err
+	}
+
+	delegate := delegationTarget.UnprotectedHandler()
+	if delegate == nil {
+		delegate = http.NotFoundHandler()
+	}
+
+	resourceHandler := &ResourceHandler{}
+	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/api/", resourceHandler)
+	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/apis/", resourceHandler)
+
+	return genericserver, nil
+}
+
 func BuildHandlerChain(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
 	handler := genericapifilters.WithRequestInfo(apiHandler, c.RequestInfoResolver)
 	handler = genericfilters.WithPanicRecovery(handler, c.RequestInfoResolver)
@@ -94,3 +131,19 @@ func WithClusterName(handler http.Handler, cluster string) http.Handler {
 	})
 }
 */
+
+type wrapRequestInfoResolverForNamespace struct {
+	genericrequest.RequestInfoResolver
+}
+
+func (r wrapRequestInfoResolverForNamespace) NewRequestInfo(req *http.Request) (*genericrequest.RequestInfo, error) {
+	info, err := r.RequestInfoResolver.NewRequestInfo(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if info.Resource == "namespaces" {
+		info.Namespace = ""
+	}
+	return info, nil
+}
