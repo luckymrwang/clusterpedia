@@ -15,18 +15,3 @@ func ExtractClusterName(obj runtime.Object) string {
 	}
 	return ""
 }
-
-func InjectClusterName(obj runtime.Object, name string) {
-	m, err := meta.Accessor(obj)
-	if err != nil {
-		panic(err)
-	}
-
-	annotations := m.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-
-	annotations[internal.ShadowAnnotationClusterName] = name
-	m.SetAnnotations(annotations)
-}

@@ -24,7 +24,6 @@ import (
 	"github.com/clusterpedia-io/clusterpedia/pkg/generated/clientset/versioned"
 	informers "github.com/clusterpedia-io/clusterpedia/pkg/generated/informers/externalversions"
 	"github.com/clusterpedia-io/clusterpedia/pkg/kubeapiserver"
-	"github.com/clusterpedia-io/clusterpedia/pkg/storage"
 	"github.com/clusterpedia-io/clusterpedia/pkg/utils/filters"
 )
 
@@ -61,8 +60,6 @@ func init() {
 // Config defines the config for the apiserver
 type Config struct {
 	GenericConfig *genericapiserver.RecommendedConfig
-
-	StorageFactory storage.StorageFactory
 }
 
 type ClusterPediaServer struct {
@@ -72,8 +69,7 @@ type ClusterPediaServer struct {
 type completedConfig struct {
 	GenericConfig genericapiserver.CompletedConfig
 
-	ClientConfig   *clientrest.Config
-	StorageFactory storage.StorageFactory
+	ClientConfig *clientrest.Config
 }
 
 // CompletedConfig embeds a private pointer that cannot be instantiated outside of this package.
@@ -86,7 +82,6 @@ func (cfg *Config) Complete() CompletedConfig {
 	c := completedConfig{
 		cfg.GenericConfig.Complete(),
 		cfg.GenericConfig.ClientConfig,
-		cfg.StorageFactory,
 	}
 
 	c.GenericConfig.Version = &version.Info{
@@ -121,7 +116,6 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 	resourceServerConfig.GenericConfig.ExternalAddress = config.GenericConfig.ExternalAddress
 	resourceServerConfig.GenericConfig.LoopbackClientConfig = config.GenericConfig.LoopbackClientConfig
 	resourceServerConfig.ExtraConfig = kubeapiserver.ExtraConfig{
-		StorageFactory:           config.StorageFactory,
 		InitialAPIGroupResources: initialAPIGroupResources,
 	}
 

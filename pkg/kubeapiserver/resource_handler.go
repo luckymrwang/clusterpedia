@@ -7,7 +7,6 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apiserver/pkg/endpoints/handlers"
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/klog/v2"
@@ -47,7 +46,7 @@ func (r *ResourceHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resource, reqScope, storage := info.APIResource, info.RequestScope, info.Storage
+	resource := info.APIResource
 	if requestInfo.Namespace != "" && !resource.Namespaced {
 		r.delegate.ServeHTTP(w, req)
 		return
@@ -64,11 +63,11 @@ func (r *ResourceHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		handler = handlers.GetResource(storage, reqScope)
+		//handler = handlers.GetResource(storage, reqScope)
 	case "list":
-		handler = handlers.ListResource(storage, nil, reqScope, false, r.minRequestTimeout)
+		//handler = handlers.ListResource(storage, nil, reqScope, false, r.minRequestTimeout)
 	case "watch":
-		handler = handlers.ListResource(storage, storage, reqScope, true, r.minRequestTimeout)
+		//handler = handlers.ListResource(storage, storage, reqScope, true, r.minRequestTimeout)
 	default:
 		responsewriters.ErrorNegotiated(
 			apierrors.NewMethodNotSupported(gvr.GroupResource(), requestInfo.Verb),

@@ -6,14 +6,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
-	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericfilters "k8s.io/apiserver/pkg/server/filters"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/restmapper"
 	"net/http"
 
-	"github.com/clusterpedia-io/clusterpedia/pkg/storage"
 	"github.com/clusterpedia-io/clusterpedia/pkg/utils/filters"
 )
 
@@ -55,7 +53,6 @@ func NewDefaultConfig() *Config {
 }
 
 type ExtraConfig struct {
-	StorageFactory           storage.StorageFactory
 	InitialAPIGroupResources []*restmapper.APIGroupResources
 }
 
@@ -97,19 +94,3 @@ func WithClusterName(handler http.Handler, cluster string) http.Handler {
 	})
 }
 */
-
-type wrapRequestInfoResolverForNamespace struct {
-	genericrequest.RequestInfoResolver
-}
-
-func (r wrapRequestInfoResolverForNamespace) NewRequestInfo(req *http.Request) (*genericrequest.RequestInfo, error) {
-	info, err := r.RequestInfoResolver.NewRequestInfo(req)
-	if err != nil {
-		return nil, err
-	}
-
-	if info.Resource == "namespaces" {
-		info.Namespace = ""
-	}
-	return info, nil
-}

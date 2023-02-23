@@ -18,8 +18,6 @@ import (
 	logsapi "k8s.io/component-base/logs/api/v1"
 
 	"github.com/clusterpedia-io/clusterpedia/pkg/apiserver"
-	"github.com/clusterpedia-io/clusterpedia/pkg/storage"
-	storageoptions "github.com/clusterpedia-io/clusterpedia/pkg/storage/options"
 )
 
 type ClusterPediaServerOptions struct {
@@ -36,8 +34,6 @@ type ClusterPediaServerOptions struct {
 	FeatureGate    featuregate.FeatureGate
 	Admission      *genericoptions.AdmissionOptions
 	//      Traces         *genericoptions.TracingOptions
-
-	Storage *storageoptions.StorageOptions
 }
 
 func NewServerOptions() *ClusterPediaServerOptions {
@@ -64,25 +60,18 @@ func NewServerOptions() *ClusterPediaServerOptions {
 		Admission:      genericoptions.NewAdmissionOptions(),
 		//      Traces:         genericoptions.NewTracingOptions(),
 
-		Storage: storageoptions.NewStorageOptions(),
 	}
 }
 
 func (o *ClusterPediaServerOptions) Validate() error {
 	errors := []error{}
 	errors = append(errors, o.validateGenericOptions()...)
-	errors = append(errors, o.Storage.Validate()...)
 
 	return utilerrors.NewAggregate(errors)
 }
 
 func (o *ClusterPediaServerOptions) Config() (*apiserver.Config, error) {
 	if err := o.Validate(); err != nil {
-		return nil, err
-	}
-
-	storage, err := storage.NewStorageFactory(o.Storage.Name, o.Storage.ConfigPath)
-	if err != nil {
 		return nil, err
 	}
 
@@ -110,8 +99,7 @@ func (o *ClusterPediaServerOptions) Config() (*apiserver.Config, error) {
 	}
 
 	return &apiserver.Config{
-		GenericConfig:  genericConfig,
-		StorageFactory: storage,
+		GenericConfig: genericConfig,
 	}, nil
 }
 
@@ -163,8 +151,6 @@ func (o *ClusterPediaServerOptions) Flags() cliflag.NamedFlagSets {
 
 	// o.Admission.AddFlags(fss.FlagSet("admission"))
 	// o.Traces.AddFlags(fss.FlagSet("traces"))
-
-	o.Storage.AddFlags(fss.FlagSet("storage"))
 	return fss
 }
 

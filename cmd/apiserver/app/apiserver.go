@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"os"
-
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	genericfeatures "k8s.io/apiserver/pkg/features"
@@ -16,7 +14,6 @@ import (
 	"k8s.io/component-base/term"
 
 	"github.com/clusterpedia-io/clusterpedia/cmd/apiserver/app/options"
-	"github.com/clusterpedia-io/clusterpedia/pkg/storage"
 	"github.com/clusterpedia-io/clusterpedia/pkg/version/verflag"
 )
 
@@ -80,6 +77,4 @@ func init() {
 	utilfeature.DefaultMutableFeatureGate = featuregate.NewFeatureGate()
 	runtime.Must(utilfeature.DefaultMutableFeatureGate.Add(gates))
 	utilfeature.DefaultFeatureGate = utilfeature.DefaultMutableFeatureGate
-
-	runtime.Must(storage.LoadPlugins(os.Getenv("STORAGE_PLUGINS")))
 }
