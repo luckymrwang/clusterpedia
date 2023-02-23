@@ -15,12 +15,15 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes"
 	clientrest "k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 
 	internal "github.com/clusterpedia-io/api/clusterpedia"
 	"github.com/clusterpedia-io/api/clusterpedia/install"
 	"github.com/clusterpedia-io/clusterpedia/pkg/apiserver/registry/clusterpedia/resources"
+	"github.com/clusterpedia-io/clusterpedia/pkg/client/clientset/versioned"
+	"github.com/clusterpedia-io/clusterpedia/pkg/informers"
 	"github.com/clusterpedia-io/clusterpedia/pkg/kubeapiserver"
 	"github.com/clusterpedia-io/clusterpedia/pkg/utils/filters"
 )
@@ -104,17 +107,23 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 		return nil, err
 	}
 
-	//crdclient, err := versioned.NewForConfig(config.ClientConfig)
+	kubernetesClient, err := kubernetes.NewForConfig(config.ClientConfig)
 	if err != nil {
 		return nil, err
 	}
-	//clusterpediaInformerFactory := informers.NewSharedInformerFactory(crdclient, 0)
+	aggregationClient, err := versioned.NewForConfig(config.ClientConfig)
+	if err != nil {
+		return nil, err
+	}
+	//clusterpediaInformerFactory := informers.NewSharedInformerFactory(kubernetesClient, 0)
+	informerFactory := informers.NewInformerFactories(kubernetesClient, aggregationClient)
 
 	resourceServerConfig := kubeapiserver.NewDefaultConfig()
 	resourceServerConfig.GenericConfig.ExternalAddress = config.GenericConfig.ExternalAddress
 	resourceServerConfig.GenericConfig.LoopbackClientConfig = config.GenericConfig.LoopbackClientConfig
 	resourceServerConfig.ExtraConfig = kubeapiserver.ExtraConfig{
 		InitialAPIGroupResources: initialAPIGroupResources,
+		InformerFactory:          informerFactory,
 	}
 	kubeResourceAPIServer, err := resourceServerConfig.Complete().New(genericapiserver.NewEmptyDelegate())
 	if err != nil {
@@ -135,7 +144,7 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 	}
 
 	v1beta1storage := map[string]rest.Storage{}
-	v1beta1storage["resources"] = resources.NewREST(kubeResourceAPIServer.Handler)
+	v1beta1storage["resources"] = resources.NewREST(kubeResourceAPIServer.Handler.GoRestfulContainer)
 
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(internal.GroupName, Scheme, ParameterCodec, Codecs)
 	apiGroupInfo.VersionedResourcesStorageMap["v1beta1"] = v1beta1storage

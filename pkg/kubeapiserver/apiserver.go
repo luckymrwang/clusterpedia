@@ -1,12 +1,19 @@
 package kubeapiserver
 
 import (
+	"bytes"
+	"fmt"
+	"k8s.io/klog/v2"
 	"net/http"
+	rt "runtime"
+	"time"
 
+	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	urlruntime "k8s.io/apimachinery/pkg/util/runtime"
 	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -14,7 +21,10 @@ import (
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/restmapper"
 
+	"github.com/clusterpedia-io/clusterpedia/pkg/informers"
+	resourcev1alpha3 "github.com/clusterpedia-io/clusterpedia/pkg/kapis/resources/v1alpha3"
 	"github.com/clusterpedia-io/clusterpedia/pkg/utils/filters"
+	"github.com/clusterpedia-io/clusterpedia/pkg/utils/iputil"
 	"github.com/clusterpedia-io/clusterpedia/pkg/version"
 )
 
@@ -57,6 +67,8 @@ func NewDefaultConfig() *Config {
 
 type ExtraConfig struct {
 	InitialAPIGroupResources []*restmapper.APIGroupResources
+
+	InformerFactory informers.InformerFactory
 }
 
 type Config struct {
@@ -92,7 +104,7 @@ func (c *Config) Complete() CompletedConfig {
 }
 
 func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget) (*genericapiserver.GenericAPIServer, error) {
-	genericserver, err := c.GenericConfig.New("kube-aggregation-apiserver", delegationTarget)
+	genericserver, err := c.GenericConfig.New("github.com/clusterpedia-io/clusterpedia-apiserver", delegationTarget)
 	if err != nil {
 		return nil, err
 	}
@@ -102,9 +114,18 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 		delegate = http.NotFoundHandler()
 	}
 
-	resourceHandler := &ResourceHandler{}
-	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/api/", resourceHandler)
-	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/apis/", resourceHandler)
+	container := restful.NewContainer()
+	container.Filter(logRequestAndResponse)
+	container.Router(restful.CurlyRouter{})
+	container.RecoverHandler(func(panicReason interface{}, httpWriter http.ResponseWriter) {
+		logStackOnRecover(panicReason, httpWriter)
+	})
+	urlruntime.Must(resourcev1alpha3.AddToContainer(container, c.ExtraConfig.InformerFactory))
+
+	//resourceHandler := &ResourceHandler{}
+	//genericserver.Handler.NonGoRestfulMux.HandlePrefix("/apibb/", container)
+	//genericserver.Handler.NonGoRestfulMux.HandlePrefix("/apis/", container)
+	genericserver.Handler.GoRestfulContainer = container
 
 	return genericserver, nil
 }
@@ -146,4 +167,46 @@ func (r wrapRequestInfoResolverForNamespace) NewRequestInfo(req *http.Request) (
 		info.Namespace = ""
 	}
 	return info, nil
+}
+
+func logStackOnRecover(panicReason interface{}, w http.ResponseWriter) {
+	var buffer bytes.Buffer
+	buffer.WriteString(fmt.Sprintf("recover from panic situation: - %v\r\n", panicReason))
+	for i := 2; ; i += 1 {
+		_, file, line, ok := rt.Caller(i)
+		if !ok {
+			break
+		}
+		buffer.WriteString(fmt.Sprintf("    %s:%d\r\n", file, line))
+	}
+	klog.Errorln(buffer.String())
+
+	headers := http.Header{}
+	if ct := w.Header().Get("Content-Type"); len(ct) > 0 {
+		headers.Set("Accept", ct)
+	}
+
+	w.WriteHeader(http.StatusInternalServerError)
+	w.Write([]byte("Internal server error"))
+}
+
+func logRequestAndResponse(req *restful.Request, resp *restful.Response, chain *restful.FilterChain) {
+	start := time.Now()
+	chain.ProcessFilter(req, resp)
+
+	// Always log error response
+	logWithVerbose := klog.V(4)
+	if resp.StatusCode() > http.StatusBadRequest {
+		logWithVerbose = klog.V(0)
+	}
+
+	logWithVerbose.Infof("%s - \"%s %s %s\" %d %d %dms",
+		iputil.RemoteIp(req.Request),
+		req.Request.Method,
+		req.Request.URL,
+		req.Request.Proto,
+		resp.StatusCode(),
+		resp.ContentLength(),
+		time.Since(start)/time.Millisecond,
+	)
 }
