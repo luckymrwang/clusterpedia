@@ -21,10 +21,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: clusterpedia-apiserver
-    namespace: clusterpedia-system
-  - kind: ServiceAccount
-    name: clusterpedia-clustersynchro-manager
-    namespace: clusterpedia-system
-  - kind: ServiceAccount
-    name: clusterpedia-controller-manager
-    namespace: clusterpedia-system
+    namespace: clusterpedia

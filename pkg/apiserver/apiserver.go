@@ -21,8 +21,6 @@ import (
 	internal "github.com/clusterpedia-io/api/clusterpedia"
 	"github.com/clusterpedia-io/api/clusterpedia/install"
 	"github.com/clusterpedia-io/clusterpedia/pkg/apiserver/registry/clusterpedia/resources"
-	"github.com/clusterpedia-io/clusterpedia/pkg/generated/clientset/versioned"
-	informers "github.com/clusterpedia-io/clusterpedia/pkg/generated/informers/externalversions"
 	"github.com/clusterpedia-io/clusterpedia/pkg/kubeapiserver"
 	"github.com/clusterpedia-io/clusterpedia/pkg/utils/filters"
 )
@@ -106,11 +104,11 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 		return nil, err
 	}
 
-	crdclient, err := versioned.NewForConfig(config.ClientConfig)
+	//crdclient, err := versioned.NewForConfig(config.ClientConfig)
 	if err != nil {
 		return nil, err
 	}
-	clusterpediaInformerFactory := informers.NewSharedInformerFactory(crdclient, 0)
+	//clusterpediaInformerFactory := informers.NewSharedInformerFactory(crdclient, 0)
 
 	resourceServerConfig := kubeapiserver.NewDefaultConfig()
 	resourceServerConfig.GenericConfig.ExternalAddress = config.GenericConfig.ExternalAddress
@@ -142,8 +140,8 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 	}
 
 	genericServer.AddPostStartHookOrDie("start-clusterpedia-informers", func(context genericapiserver.PostStartHookContext) error {
-		clusterpediaInformerFactory.Start(context.StopCh)
-		clusterpediaInformerFactory.WaitForCacheSync(context.StopCh)
+		//clusterpediaInformerFactory.Start(context.StopCh)
+		//clusterpediaInformerFactory.WaitForCacheSync(context.StopCh)
 
 		return nil
 	})

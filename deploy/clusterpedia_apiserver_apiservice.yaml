@@ -9,5 +9,5 @@ spec:
   versionPriority: 100
   service:
     name: clusterpedia-apiserver
-    namespace: clusterpedia-system
+    namespace: clusterpedia
   version: v1beta1
