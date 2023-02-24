@@ -144,7 +144,7 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 	}
 
 	v1beta1storage := map[string]rest.Storage{}
-	v1beta1storage["resources"] = resources.NewREST(kubeResourceAPIServer.Handler.GoRestfulContainer)
+	v1beta1storage["resources"] = resources.NewREST(kubeResourceAPIServer.Handler.NonGoRestfulMux)
 
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(internal.GroupName, Scheme, ParameterCodec, Codecs)
 	apiGroupInfo.VersionedResourcesStorageMap["v1beta1"] = v1beta1storage

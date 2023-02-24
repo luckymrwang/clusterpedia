@@ -104,7 +104,7 @@ func (c *Config) Complete() CompletedConfig {
 }
 
 func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget) (*genericapiserver.GenericAPIServer, error) {
-	genericserver, err := c.GenericConfig.New("github.com/clusterpedia-io/clusterpedia-apiserver", delegationTarget)
+	genericserver, err := c.GenericConfig.New("generic-apiserver", delegationTarget)
 	if err != nil {
 		return nil, err
 	}
@@ -123,9 +123,7 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 	urlruntime.Must(resourcev1alpha3.AddToContainer(container, c.ExtraConfig.InformerFactory))
 
 	//resourceHandler := &ResourceHandler{}
-	//genericserver.Handler.NonGoRestfulMux.HandlePrefix("/apibb/", container)
-	//genericserver.Handler.NonGoRestfulMux.HandlePrefix("/apis/", container)
-	genericserver.Handler.GoRestfulContainer = container
+	genericserver.Handler.NonGoRestfulMux.HandlePrefix("/kapis/", container)
 
 	return genericserver, nil
 }
