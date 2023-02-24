@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metainternal "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,6 +19,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	clientrest "k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
+	"k8s.io/client-go/util/retry"
+	"k8s.io/klog"
 
 	internal "github.com/clusterpedia-io/api/clusterpedia"
 	"github.com/clusterpedia-io/api/clusterpedia/install"
@@ -115,7 +118,6 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	//clusterpediaInformerFactory := informers.NewSharedInformerFactory(kubernetesClient, 0)
 	informerFactory := informers.NewInformerFactories(kubernetesClient, aggregationClient)
 
 	resourceServerConfig := kubeapiserver.NewDefaultConfig()
@@ -153,10 +155,7 @@ func (config completedConfig) New() (*ClusterPediaServer, error) {
 	}
 
 	genericServer.AddPostStartHookOrDie("start-clusterpedia-informers", func(context genericapiserver.PostStartHookContext) error {
-		//clusterpediaInformerFactory.Start(context.StopCh)
-		//clusterpediaInformerFactory.WaitForCacheSync(context.StopCh)
-
-		return nil
+		return waitForResourceSync(context.StopCh, informerFactory, kubernetesClient)
 	})
 
 	return &ClusterPediaServer{
@@ -187,3 +186,100 @@ func (s hooksDelegate) ListedPaths() []string {
 func (s hooksDelegate) NextDelegate() genericapiserver.DelegationTarget {
 	return nil
 }
+
+func waitForResourceSync(stopCh <-chan struct{}, informerFactory informers.InformerFactory, kubernetesClient *kubernetes.Clientset) error {
+	klog.V(0).Info("Start cache objects")
+
+	// resources we have to create informer first
+	k8sGVRs := map[schema.GroupVersion][]string{
+		{Group: "", Version: "v1"}: {
+			"namespaces",
+			"nodes",
+			"resourcequotas",
+			"pods",
+			"services",
+			"persistentvolumeclaims",
+			"persistentvolumes",
+			"secrets",
+			"configmaps",
+			"serviceaccounts",
+		},
+		{Group: "apps", Version: "v1"}: {
+			"deployments",
+			"daemonsets",
+			"replicasets",
+			"statefulsets",
+			"controllerrevisions",
+		},
+		{Group: "storage.k8s.io", Version: "v1"}: {
+			"storageclasses",
+		},
+		{Group: "batch", Version: "v1"}: {
+			"jobs",
+		},
+		{Group: "batch", Version: "v1beta1"}: {
+			"cronjobs",
+		},
+		{Group: "networking.k8s.io", Version: "v1"}: {
+			"ingresses",
+			"networkpolicies",
+		},
+		{Group: "autoscaling", Version: "v2beta2"}: {
+			"horizontalpodautoscalers",
+		},
+	}
+
+	if err := waitForCacheSync(kubernetesClient.Discovery(),
+		informerFactory.KubernetesSharedInformerFactory(),
+		func(resource schema.GroupVersionResource) (interface{}, error) {
+			return informerFactory.KubernetesSharedInformerFactory().ForResource(resource)
+		},
+		k8sGVRs, stopCh); err != nil {
+		return err
+	}
+
+	klog.V(0).Info("Finished caching objects")
+	return nil
+
+}
+
+func waitForCacheSync(discoveryClient discovery.DiscoveryInterface, sharedInformerFactory informers.GenericInformerFactory, informerForResourceFunc informerForResourceFunc, GVRs map[schema.GroupVersion][]string, stopCh <-chan struct{}) error {
+	for groupVersion, resourceNames := range GVRs {
+		var apiResourceList *metav1.APIResourceList
+		var err error
+		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+			return !errors.IsNotFound(err)
+		}, func() error {
+			apiResourceList, err = discoveryClient.ServerResourcesForGroupVersion(groupVersion.String())
+			return err
+		})
+		if err != nil {
+			return fmt.Errorf("failed to fetch group version resources %s: %s", groupVersion, err)
+		}
+		for _, resourceName := range resourceNames {
+			groupVersionResource := groupVersion.WithResource(resourceName)
+			if !isResourceExists(apiResourceList.APIResources, groupVersionResource) {
+				klog.Warningf("resource %s not exists in the cluster", groupVersionResource)
+			} else {
+				// reflect.ValueOf(sharedInformerFactory).MethodByName("ForResource").Call([]reflect.Value{reflect.ValueOf(groupVersionResource)})
+				if _, err = informerForResourceFunc(groupVersionResource); err != nil {
+					return fmt.Errorf("failed to create informer for %s: %s", groupVersionResource, err)
+				}
+			}
+		}
+	}
+	sharedInformerFactory.Start(stopCh)
+	sharedInformerFactory.WaitForCacheSync(stopCh)
+	return nil
+}
+
+func isResourceExists(apiResources []metav1.APIResource, resource schema.GroupVersionResource) bool {
+	for _, apiResource := range apiResources {
+		if apiResource.Name == resource.Resource {
+			return true
+		}
+	}
+	return false
+}
+
+type informerForResourceFunc func(resource schema.GroupVersionResource) (interface{}, error)
